@@ -72,27 +72,32 @@ function parseRoute() {
 
 async function saveBoard() {
   try {
-    await fetch(`/api/boards/${state.board.id}`, {
+    const response = await fetch(`/api/boards/${state.board.id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ editKey: state.board.editKey, data: state.board })
     });
+    if (!response.ok) {
+      throw new Error(`Save failed with status ${response.status}`);
+    }
+    return true;
   } catch (error) {
     console.error("保存に失敗しました", error);
     showToast("エラー：保存に失敗しました");
+    return false;
   }
 }
 
 async function loadBoard(id) {
   try {
-    const params = new URLSearchParams(location.search);
-    const key = params.get("key");
-    const mode = params.get("mode")||"edit";
-    
-    const response = await fetch(`/api/boards/${id}?key=${key}&mode=${mode}`);
+    const key = state.route.key;
+    const mode = state.route.mode;
+    const query = new URLSearchParams({ key, mode });
+    const response = await fetch(`/api/boards/${encodeURIComponent(id)}?${query}`);
     if (!response.ok) return null;
     return await response.json();
-  } catch {
+  } catch (error) {
+    console.error("ボードの読み込みに失敗しました", error);
     return null;
   }
 }
@@ -121,6 +126,9 @@ function showToast(message) {
 async function createBoard() {
   try {
     const response = await fetch('/api/boards', { method: 'POST' });
+    if (!response.ok) {
+      throw new Error(`Create failed with status ${response.status}`);
+    }
     const newBoard = await response.json();
     
     // バックエンドから返ってきた初期データを状態にセットして画面遷移
@@ -607,7 +615,7 @@ function deleteFolderAndContents(folderId) {
   state.board.folders = state.board.folders.filter((folder) => folder.id !== folderId);
 }
 
-function initialize() {
+async function initialize() {
   state.route = parseRoute();
   state.editingIdeaId = null;
   state.editorDraft = null;
@@ -619,13 +627,17 @@ function initialize() {
     return;
   }
 
-  const board = loadBoard(state.route.boardId);
-  const validKey =
-    board &&
-    ((state.route.mode === "edit" && state.route.key === board.editKey) ||
-      (state.route.mode === "view" && state.route.key === board.viewKey));
+  app.innerHTML = `
+    <div class="app-shell">
+      ${renderTopbar(false)}
+      <main class="home">
+        <div class="empty-state">ボードを読み込んでいます...</div>
+      </main>
+    </div>
+  `;
 
-  if (!validKey) {
+  const board = await loadBoard(state.route.boardId);
+  if (!board) {
     app.innerHTML = `
       <div class="app-shell">
         ${renderTopbar(false)}
@@ -643,7 +655,7 @@ function initialize() {
 
   state.board = board;
   const root = board.folders.find((folder) => folder.parentId === null);
-  state.selectedFolderId = root.id;
+  state.selectedFolderId = root?.id || board.folders[0]?.id || null;
   if (isEditor()) rememberBoard(board, board.editKey);
   renderBoard();
 }

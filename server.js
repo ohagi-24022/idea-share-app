@@ -3,16 +3,18 @@ const cors = require('cors');
 const Database = require('better-sqlite3');
 const crypto = require('crypto');
 const path = require('path');
+const fs = require('fs');
 
 const app = express();
 app.use(cors());
 app.use(express.json());
 
-// ★ publicフォルダの中身（HTML/CSS/JS）をそのまま配信する
-app.use(express.static('public'));
+// publicフォルダの中身（HTML/CSS/JS）をそのまま配信する
+app.use(express.static(path.join(__dirname, 'public')));
 
 // データベースの初期化（環境変数があればそこを参照、なければローカルファイル）
-const dbPath = process.env.DB_PATH || 'ideashelf.db';
+const dbPath = path.resolve(process.env.DB_PATH || path.join(__dirname, 'ideashelf.db'));
+fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 const db = new Database(dbPath);
 
 db.exec(`
@@ -27,6 +29,10 @@ db.exec(`
 `);
 
 const generateId = () => crypto.randomBytes(8).toString('hex');
+
+app.get('/api/health', (_req, res) => {
+  res.json({ ok: true });
+});
 
 // 1. ボード新規作成
 app.post('/api/boards', (req, res) => {
@@ -60,14 +66,35 @@ app.get('/api/boards/:id', (req, res) => {
   const row = db.prepare('SELECT * FROM boards WHERE id = ?').get(id);
   if (!row) return res.status(404).json({ error: "Board not found" });
 
-  let boardData = JSON.parse(row.data);
+  let boardData;
+  try {
+    boardData = JSON.parse(row.data);
+  } catch {
+    return res.status(500).json({ error: "Board data is invalid" });
+  }
 
   if (mode === 'edit' && key === row.edit_key) {
     return res.json(boardData);
   } else if (mode === 'view' && key === row.view_key) {
-    boardData.folders = boardData.folders.filter(f => f.isPublic);
+    const foldersById = new Map(boardData.folders.map(folder => [folder.id, folder]));
+    const isVisible = (folder) => {
+      let current = folder;
+      const visited = new Set();
+
+      while (current) {
+        if (visited.has(current.id) || !current.isPublic) return false;
+        visited.add(current.id);
+        current = current.parentId ? foldersById.get(current.parentId) : null;
+      }
+
+      return true;
+    };
+
+    boardData.folders = boardData.folders.filter(isVisible);
     const publicFolderIds = new Set(boardData.folders.map(f => f.id));
     boardData.ideas = boardData.ideas.filter(idea => publicFolderIds.has(idea.folderId));
+    delete boardData.editKey;
+    delete boardData.viewKey;
     return res.json(boardData);
   } else {
     return res.status(403).json({ error: "Unauthorized" });
@@ -84,6 +111,15 @@ app.put('/api/boards/:id', (req, res) => {
   if (!row || row.edit_key !== editKey) {
     return res.status(403).json({ error: "Unauthorized" });
   }
+
+  if (!data || typeof data !== 'object' || !Array.isArray(data.folders) || !Array.isArray(data.ideas)) {
+    return res.status(400).json({ error: "Invalid board data" });
+  }
+
+  data.id = id;
+  data.editKey = row.edit_key;
+  data.viewKey = db.prepare('SELECT view_key FROM boards WHERE id = ?').get(id).view_key;
+  data.updatedAt = now;
 
   const stmt = db.prepare('UPDATE boards SET data = ?, updated_at = ? WHERE id = ?');
   stmt.run(JSON.stringify(data), now, id);
