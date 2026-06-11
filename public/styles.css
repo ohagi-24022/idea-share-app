@@ -97,6 +97,33 @@ button {
   gap: 8px;
 }
 
+.share-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.share-button-icon {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.edit-share {
+  color: var(--accent-dark);
+  border-color: #e8b5a8;
+  background: var(--accent-soft);
+}
+
+.view-share {
+  color: var(--green);
+  border-color: #b8d4ca;
+  background: var(--green-soft);
+}
+
+.share-details {
+  color: var(--muted);
+}
+
 .button {
   min-height: 40px;
   border-radius: 10px;
@@ -773,6 +800,15 @@ button {
   }
 
   .topbar-actions .button:not(.primary) {
+    padding-inline: 10px;
+    font-size: 0;
+  }
+
+  .topbar-actions .share-button-icon {
+    font-size: 15px;
+  }
+
+  .share-details {
     display: none;
   }
 

@@ -289,7 +289,15 @@ function renderTopbar(showBoardActions = true) {
               <button class="icon-button mobile-menu" data-action="toggle-sidebar" aria-label="メニュー">☰</button>
               ${
                 isEditor()
-                  ? `<button class="button" data-action="share">共有する</button>`
+                  ? `<button class="button share-button edit-share" data-action="copy-share-url" data-mode="edit" title="編集用URLをコピー">
+                       <span class="share-button-icon">✎</span>
+                       <span>編集用URL</span>
+                     </button>
+                     <button class="button share-button view-share" data-action="copy-share-url" data-mode="view" title="閲覧用URLをコピー">
+                       <span class="share-button-icon">○</span>
+                       <span>閲覧用URL</span>
+                     </button>
+                     <button class="icon-button share-details" data-action="share" title="共有URLの詳細" aria-label="共有URLの詳細">⋯</button>`
                   : `<span class="access-badge view">閲覧専用</span>`
               }
               <button class="button primary" data-action="new-idea" ${
@@ -494,18 +502,8 @@ function renderEditor() {
 }
 
 function renderShareModal() {
-  const editUrl = new URL(location.href);
-  editUrl.search = new URLSearchParams({
-    board: state.board.id,
-    key: state.board.editKey,
-    mode: "edit",
-  }).toString();
-  const viewUrl = new URL(location.href);
-  viewUrl.search = new URLSearchParams({
-    board: state.board.id,
-    key: state.board.viewKey,
-    mode: "view",
-  }).toString();
+  const editUrl = buildShareUrl("edit");
+  const viewUrl = buildShareUrl("view");
 
   document.body.insertAdjacentHTML(
     "beforeend",
@@ -539,6 +537,33 @@ function renderShareModal() {
       </div>
     `,
   );
+}
+
+function buildShareUrl(mode) {
+  const url = new URL(location.href);
+  const key = mode === "view" ? state.board.viewKey : state.board.editKey;
+  url.search = new URLSearchParams({
+    board: state.board.id,
+    key,
+    mode,
+  }).toString();
+  return url;
+}
+
+async function copyText(text) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.style.position = "fixed";
+  textarea.style.opacity = "0";
+  document.body.appendChild(textarea);
+  textarea.select();
+  document.execCommand("copy");
+  textarea.remove();
 }
 
 function createFolder(parentId) {
@@ -759,13 +784,18 @@ app.addEventListener("click", async (event) => {
     showToast("フォルダを削除しました");
   }
   if (action === "share") renderShareModal();
+  if (action === "copy-share-url" && isEditor()) {
+    const mode = target.dataset.mode;
+    await copyText(buildShareUrl(mode).href);
+    showToast(mode === "view" ? "閲覧用URLをコピーしました" : "編集用URLをコピーしました");
+  }
   if (action === "close-modal") {
     if (event.target === target || target.tagName === "BUTTON") {
       document.querySelector(".modal-backdrop")?.remove();
     }
   }
   if (action === "copy-url") {
-    await navigator.clipboard.writeText(target.dataset.url);
+    await copyText(target.dataset.url);
     showToast("URLをコピーしました");
   }
 });
