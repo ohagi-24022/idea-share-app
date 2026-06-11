@@ -87,7 +87,7 @@ async function loadBoard(id) {
   try {
     const params = new URLSearchParams(location.search);
     const key = params.get("key");
-    const mode = params.get("mode");
+    const mode = params.get("mode")||"edit";
     
     const response = await fetch(`/api/boards/${id}?key=${key}&mode=${mode}`);
     if (!response.ok) return null;
