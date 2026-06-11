@@ -1,0 +1,4 @@
+node_modules
+.git
+ideashelf.db
+ideashelf.db-journal
