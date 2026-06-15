@@ -121,9 +121,11 @@ function getRecent() {
   }
 }
 
-function rememberBoard(board, key) {
-  const recent = getRecent().filter((item) => item.id !== board.id);
-  recent.unshift({ id: board.id, name: board.name, key, visitedAt: now() });
+function rememberBoard(board, key, mode = "edit") {
+  const recent = getRecent().filter(
+    (item) => !(item.id === board.id && (item.mode || "edit") === mode),
+  );
+  recent.unshift({ id: board.id, name: board.name, key, mode, visitedAt: now() });
   localStorage.setItem(RECENT_KEY, JSON.stringify(recent.slice(0, 8)));
 }
 
@@ -132,6 +134,30 @@ function showToast(message) {
   toast.classList.add("show");
   clearTimeout(showToast.timer);
   showToast.timer = setTimeout(() => toast.classList.remove("show"), 2200);
+}
+
+function parseSharedBoardUrl(value) {
+  const trimmed = value.trim();
+  const urlText = trimmed.match(/https?:\/\/[^\s]+/)?.[0] || trimmed;
+
+  try {
+    const url = new URL(urlText, location.origin);
+    const boardId = url.searchParams.get("board");
+    const key = url.searchParams.get("key");
+    const mode = url.searchParams.get("mode") === "view" ? "view" : "edit";
+
+    if (url.origin !== location.origin || !boardId || !key) return null;
+    return { boardId, key, mode };
+  } catch {
+    return null;
+  }
+}
+
+function updateAppTitle(name = "Idea Shelf") {
+  document.title = name;
+  document
+    .querySelector('meta[name="apple-mobile-web-app-title"]')
+    ?.setAttribute("content", name);
 }
 
 async function createBoard() {
@@ -144,7 +170,7 @@ async function createBoard() {
     
     // バックエンドから返ってきた初期データを状態にセットして画面遷移
     state.board = newBoard.data; 
-    rememberBoard(state.board, newBoard.editKey);
+    rememberBoard(state.board, newBoard.editKey, "edit");
     navigateToBoard(newBoard.id, newBoard.editKey, "edit");
   } catch (error) {
     console.error("ボードの作成に失敗しました", error);
@@ -246,7 +272,11 @@ function renderHome() {
               書き留めて、整理して、必要な人にだけ見せる。<br>
               アカウントなしですぐに使える、あなたのアイデア貯蔵庫です。
             </p>
-            <button class="button primary" data-action="create-board">新しいボードをつくる</button>
+            <div class="hero-actions">
+              <button class="button primary" data-action="create-board">新しいボードをつくる</button>
+              <span>または</span>
+              <button class="button" data-action="focus-import">共有URLを追加</button>
+            </div>
           </div>
           <div class="hero-note" aria-hidden="true">
             <span class="sketch-tag">PROJECT NOTE</span>
@@ -257,11 +287,34 @@ function renderHome() {
             <div class="sketch-line"></div>
           </div>
         </section>
+        <section class="import-section" id="import-board">
+          <div class="import-copy">
+            <p class="eyebrow">Open shared board</p>
+            <h2>共有されたボードを追加</h2>
+            <p>編集用または閲覧用URLを貼り付けると、このアプリの「最近のボード」に保存されます。</p>
+          </div>
+          <form class="import-form" data-action="import-board">
+            <label for="shared-board-url">共有URL</label>
+            <div class="import-field">
+              <input
+                id="shared-board-url"
+                name="sharedUrl"
+                type="text"
+                inputmode="url"
+                autocomplete="off"
+                placeholder="https://.../?board=...&key=...&mode=view"
+                required
+              >
+              <button class="button primary" type="submit">ボードを追加</button>
+            </div>
+            <p class="form-error" data-import-error aria-live="polite"></p>
+          </form>
+        </section>
         <section class="recent-section">
           <div class="section-heading">
             <div>
               <h2>最近のボード</h2>
-              <p>このブラウザで開いた編集用ボード</p>
+              <p>この端末で開いた編集用・閲覧用ボード</p>
             </div>
           </div>
           ${
@@ -271,10 +324,14 @@ function renderHome() {
                     (item) => `
                       <article class="recent-card" data-action="open-recent" data-id="${
                         item.id
-                      }" data-key="${item.key}">
-                        <span class="card-number">BOARD</span>
+                      }" data-key="${item.key}" data-mode="${item.mode || "edit"}">
+                        <span class="card-number">${
+                          item.mode === "view" ? "SHARED BOARD" : "BOARD"
+                        }</span>
                         <h3>${escapeHtml(item.name)}</h3>
-                        <p>最終アクセス ${formatDate(item.visitedAt)}</p>
+                        <p>${item.mode === "view" ? "閲覧用" : "編集用"}・最終アクセス ${formatDate(
+                          item.visitedAt,
+                        )}</p>
                       </article>
                     `,
                   )
@@ -764,6 +821,7 @@ async function initialize() {
 
   if (state.route.page === "home") {
     state.board = null;
+    updateAppTitle();
     renderHome();
     return;
   }
@@ -795,9 +853,10 @@ async function initialize() {
   }
 
   state.board = board;
+  updateAppTitle(board.name);
   const root = board.folders.find((folder) => folder.parentId === null);
   state.selectedFolderId = root?.id || board.folders[0]?.id || null;
-  if (isEditor()) rememberBoard(board, board.editKey);
+  rememberBoard(board, state.route.key, state.route.mode);
   renderBoard();
 }
 
@@ -824,7 +883,7 @@ app.addEventListener("change", (event) => {
     state.board.name = name;
     state.board.updatedAt = now();
     saveBoard();
-    rememberBoard(state.board, state.board.editKey);
+    rememberBoard(state.board, state.board.editKey, "edit");
     showToast("ボード名を変更しました");
   }
 });
@@ -836,8 +895,12 @@ app.addEventListener("click", async (event) => {
 
   if (action === "home") navigateHome();
   if (action === "create-board") createBoard();
+  if (action === "focus-import") {
+    document.querySelector("#import-board")?.scrollIntoView({ behavior: "smooth" });
+    window.setTimeout(() => document.querySelector("#shared-board-url")?.focus(), 350);
+  }
   if (action === "open-recent")
-    navigateToBoard(target.dataset.id, target.dataset.key, "edit");
+    navigateToBoard(target.dataset.id, target.dataset.key, target.dataset.mode || "edit");
   if (action === "toggle-sidebar") {
     state.sidebarOpen = !state.sidebarOpen;
     renderBoard();
@@ -918,6 +981,22 @@ app.addEventListener("click", async (event) => {
 });
 
 app.addEventListener("submit", async (event) => {
+  const importForm = event.target.closest('[data-action="import-board"]');
+  if (importForm) {
+    event.preventDefault();
+    const route = parseSharedBoardUrl(importForm.elements.sharedUrl.value);
+    const error = importForm.querySelector("[data-import-error]");
+
+    if (!route) {
+      error.textContent = "このアプリで発行された共有URLを入力してください。";
+      return;
+    }
+
+    error.textContent = "";
+    navigateToBoard(route.boardId, route.key, route.mode);
+    return;
+  }
+
   const form = event.target.closest('[data-action="submit-comment"]');
   if (!form) return;
   event.preventDefault();

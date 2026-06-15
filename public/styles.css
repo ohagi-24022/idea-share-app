@@ -217,6 +217,18 @@ button {
   line-height: 1.9;
 }
 
+.hero-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.hero-actions > span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .hero-note {
   min-height: 300px;
   padding: 32px;
@@ -270,6 +282,71 @@ button {
   margin-top: 76px;
   padding-top: 30px;
   border-top: 1px solid var(--line);
+}
+
+.import-section {
+  display: grid;
+  grid-template-columns: minmax(0, 0.75fr) minmax(0, 1.25fr);
+  gap: 42px;
+  align-items: center;
+  margin-top: 68px;
+  padding: 28px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--surface);
+  box-shadow: 0 10px 30px rgba(42, 39, 31, 0.05);
+}
+
+.import-copy .eyebrow {
+  margin-bottom: 8px;
+}
+
+.import-copy h2 {
+  margin: 0;
+  font-size: 22px;
+}
+
+.import-copy > p:last-child {
+  margin: 9px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.import-form label {
+  display: block;
+  margin-bottom: 7px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.import-field {
+  display: flex;
+  gap: 8px;
+}
+
+.import-field input {
+  min-width: 0;
+  flex: 1;
+  padding: 11px 13px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  outline: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.import-field input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.form-error {
+  min-height: 18px;
+  margin: 6px 0 0;
+  color: var(--accent-dark);
+  font-size: 11px;
 }
 
 .section-heading {
@@ -930,6 +1007,11 @@ button {
   .content-wrap {
     width: min(100% - 36px, 1100px);
   }
+
+  .import-section {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
 }
 
 @media (max-width: 680px) {
@@ -966,6 +1048,28 @@ button {
 
   .hero h1 {
     font-size: 43px;
+  }
+
+  .hero-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .hero-actions > span {
+    text-align: center;
+  }
+
+  .import-section {
+    margin-top: 44px;
+    padding: 20px;
+  }
+
+  .import-field {
+    flex-direction: column;
+  }
+
+  .import-field .button {
+    width: 100%;
   }
 
   .recent-grid,

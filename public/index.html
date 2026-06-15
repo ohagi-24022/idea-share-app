@@ -14,7 +14,7 @@
     <meta name="apple-mobile-web-app-title" content="Idea Shelf" />
     <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
-    <link rel="manifest" href="./site.webmanifest" />
+    <link rel="manifest" id="app-manifest" href="./site.webmanifest" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -26,6 +26,22 @@
   <body>
     <div id="app"></div>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script>
+      (() => {
+        const manifest = document.querySelector("#app-manifest");
+        const params = new URLSearchParams(location.search);
+        const board = params.get("board");
+        const key = params.get("key");
+        if (!board || !key) return;
+
+        const mode = params.get("mode") === "view" ? "view" : "edit";
+        manifest.href = `/site.webmanifest?${new URLSearchParams({
+          board,
+          key,
+          mode,
+        })}`;
+      })();
+    </script>
     <script src="./app.js"></script>
   </body>
 </html>

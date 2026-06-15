@@ -9,6 +9,53 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+app.get('/site.webmanifest', (req, res) => {
+  const { board, key } = req.query;
+  const mode = req.query.mode === 'view' ? 'view' : 'edit';
+  const hasBoardRoute = typeof board === 'string' && typeof key === 'string' && board && key;
+  let manifestName = 'Idea Shelf';
+
+  if (hasBoardRoute) {
+    const row = db.prepare('SELECT * FROM boards WHERE id = ?').get(board);
+    if (row && getAccessMode(row, key)) {
+      const boardData = parseBoardData(row);
+      if (boardData?.name) manifestName = boardData.name;
+    }
+  }
+
+  const startUrl = hasBoardRoute
+    ? `/?${new URLSearchParams({ board, key, mode }).toString()}`
+    : '/';
+  const appId = hasBoardRoute
+    ? `/?${new URLSearchParams({ board, mode }).toString()}`
+    : '/';
+
+  res.set('Cache-Control', 'no-store');
+  res.type('application/manifest+json').json({
+    name: manifestName,
+    short_name: manifestName.slice(0, 20),
+    description: '思いつきを書き留め、フォルダで育てるアイデア共有ボード',
+    id: appId,
+    start_url: startUrl,
+    scope: '/',
+    display: 'standalone',
+    background_color: '#f7f5ef',
+    theme_color: '#df5b3e',
+    icons: [
+      {
+        src: '/icon-192.png',
+        sizes: '192x192',
+        type: 'image/png'
+      },
+      {
+        src: '/icon-512.png',
+        sizes: '512x512',
+        type: 'image/png'
+      }
+    ]
+  });
+});
+
 // publicフォルダの中身（HTML/CSS/JS）をそのまま配信する
 app.use(express.static(path.join(__dirname, 'public')));
 
