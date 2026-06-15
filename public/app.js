@@ -13,6 +13,7 @@ const state = {
   editorTab: "write",
   sort: "updated",
   sidebarOpen: false,
+  unsavedIdeaId: null,
 };
 
 const uid = () =>
@@ -59,6 +60,16 @@ function formatDate(iso) {
   return new Intl.DateTimeFormat("ja-JP", {
     month: "short",
     day: "numeric",
+  }).format(new Date(iso));
+}
+
+function formatDateTime(iso) {
+  return new Intl.DateTimeFormat("ja-JP", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
   }).format(new Date(iso));
 }
 
@@ -429,6 +440,11 @@ function renderFolderContent(folder, ideas) {
                     )}</div>
                     <div class="card-meta">
                       <span>${formatDate(idea.updatedAt)} 更新</span>
+                      ${
+                        idea.comments?.length
+                          ? `<span class="comment-count">コメント ${idea.comments.length}</span>`
+                          : ""
+                      }
                       <span>→</span>
                     </div>
                   </article>
@@ -497,8 +513,103 @@ function renderEditor() {
               draft.body ? markdownToHtml(draft.body) : "<p>本文はまだありません。</p>"
             }</article>`
       }
+      ${renderComments(idea)}
     </div>
   `;
+}
+
+function renderComments(idea) {
+  const comments = Array.isArray(idea.comments) ? idea.comments : [];
+  const isUnsaved = idea.id === state.unsavedIdeaId;
+
+  return `
+    <section class="comments-section">
+      <div class="comments-heading">
+        <div>
+          <p class="eyebrow">Anonymous feedback</p>
+          <h2>コメント <span>${comments.length}</span></h2>
+        </div>
+        <p>名前やアカウントなしで投稿できます</p>
+      </div>
+      ${
+        isUnsaved
+          ? `<div class="comment-save-notice">コメントを受け付けるには、先にアイデアを保存してください。</div>`
+          : `<form class="comment-form" data-action="submit-comment">
+              <textarea
+                class="comment-input"
+                name="comment"
+                maxlength="1000"
+                placeholder="このアイデアへの感想や提案を書く..."
+                required
+              ></textarea>
+              <div class="comment-form-footer">
+                <span>匿名で公開されます</span>
+                <button class="button primary" type="submit">コメントする</button>
+              </div>
+            </form>`
+      }
+      <div class="comments-list">
+        ${
+          comments.length
+            ? [...comments]
+                .reverse()
+                .map(
+                  (comment) => `
+                    <article class="comment-item">
+                      <div class="comment-meta">
+                        <span class="anonymous-avatar">A</span>
+                        <strong>匿名</strong>
+                        <time datetime="${escapeHtml(comment.createdAt)}">${formatDateTime(
+                          comment.createdAt,
+                        )}</time>
+                      </div>
+                      <p>${escapeHtml(comment.content).replaceAll("\n", "<br>")}</p>
+                    </article>
+                  `,
+                )
+                .join("")
+            : `<div class="comments-empty">まだコメントはありません。最初のフィードバックを届けてみましょう。</div>`
+        }
+      </div>
+    </section>
+  `;
+}
+
+async function submitComment(form) {
+  const input = form.elements.comment;
+  const content = input.value.trim();
+  if (!content) return;
+
+  const button = form.querySelector('button[type="submit"]');
+  button.disabled = true;
+  button.textContent = "送信中...";
+
+  try {
+    const response = await fetch(
+      `/api/boards/${encodeURIComponent(state.board.id)}/ideas/${encodeURIComponent(
+        state.editingIdeaId,
+      )}/comments`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: state.route.key, content }),
+      },
+    );
+
+    if (!response.ok) throw new Error(`Comment failed with status ${response.status}`);
+
+    const comment = await response.json();
+    const idea = state.board.ideas.find((item) => item.id === state.editingIdeaId);
+    if (!Array.isArray(idea.comments)) idea.comments = [];
+    idea.comments.push(comment);
+    renderBoard();
+    showToast("コメントを投稿しました");
+  } catch (error) {
+    console.error("コメントの投稿に失敗しました", error);
+    button.disabled = false;
+    button.textContent = "コメントする";
+    showToast("コメントを投稿できませんでした");
+  }
 }
 
 function renderShareModal() {
@@ -598,9 +709,11 @@ function newIdea() {
     createdAt: now(),
     updatedAt: now(),
     order: ideas.length,
+    comments: [],
   };
   state.board.ideas.push(idea);
   state.editingIdeaId = idea.id;
+  state.unsavedIdeaId = idea.id;
   state.editorDraft = { title: "", body: "" };
   state.editorTab = "write";
   renderBoard();
@@ -617,7 +730,7 @@ function openIdea(id) {
   renderBoard();
 }
 
-function saveIdea() {
+async function saveIdea() {
   const idea = state.board.ideas.find((item) => item.id === state.editingIdeaId);
   if (!idea) return;
   const firstLine = stripMarkdown(state.editorDraft.body.split("\n")[0]);
@@ -626,7 +739,9 @@ function saveIdea() {
   idea.updatedAt = now();
   state.editorDraft.title = idea.title;
   state.board.updatedAt = now();
-  saveBoard();
+  const saved = await saveBoard();
+  if (!saved) return;
+  state.unsavedIdeaId = null;
   renderBoard();
   showToast("アイデアを保存しました");
 }
@@ -645,6 +760,7 @@ async function initialize() {
   state.editingIdeaId = null;
   state.editorDraft = null;
   state.sidebarOpen = false;
+  state.unsavedIdeaId = null;
 
   if (state.route.page === "home") {
     state.board = null;
@@ -745,12 +861,13 @@ app.addEventListener("click", async (event) => {
     state.editorTab = target.dataset.tab;
     renderBoard();
   }
-  if (action === "save-idea" && isEditor()) saveIdea();
+  if (action === "save-idea" && isEditor()) await saveIdea();
   if (action === "delete-idea" && isEditor()) {
     if (!confirm("このアイデアを削除しますか？")) return;
     state.board.ideas = state.board.ideas.filter(
       (idea) => idea.id !== state.editingIdeaId,
     );
+    state.unsavedIdeaId = null;
     saveBoard();
     state.editingIdeaId = null;
     state.editorDraft = null;
@@ -798,6 +915,13 @@ app.addEventListener("click", async (event) => {
     await copyText(target.dataset.url);
     showToast("URLをコピーしました");
   }
+});
+
+app.addEventListener("submit", async (event) => {
+  const form = event.target.closest('[data-action="submit-comment"]');
+  if (!form) return;
+  event.preventDefault();
+  await submitComment(form);
 });
 
 let draggedIdeaId = null;
