@@ -970,9 +970,8 @@ app.addEventListener("click", async (event) => {
     showToast(mode === "view" ? "閲覧用URLをコピーしました" : "編集用URLをコピーしました");
   }
   if (action === "close-modal") {
-    if (event.target === target || target.tagName === "BUTTON") {
-      document.querySelector(".modal-backdrop")?.remove();
-    }
+    if (target.classList.contains("modal-backdrop") && event.target !== target) return;
+    target.closest(".modal-backdrop")?.remove();
   }
   if (action === "copy-url") {
     await copyText(target.dataset.url);
