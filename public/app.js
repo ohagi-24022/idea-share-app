@@ -673,7 +673,8 @@ function renderShareModal() {
   const editUrl = buildShareUrl("edit");
   const viewUrl = buildShareUrl("view");
 
-  document.body.insertAdjacentHTML(
+  document.querySelector(".modal-backdrop")?.remove();
+  app.insertAdjacentHTML(
     "beforeend",
     `
       <div class="modal-backdrop" data-action="close-modal">
