@@ -6,8 +6,24 @@ const path = require('path');
 const fs = require('fs');
 
 const app = express();
+const JSON_LIMIT = process.env.JSON_LIMIT || '10mb';
+
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: JSON_LIMIT }));
+
+app.use((err, _req, res, next) => {
+  if (err?.type === 'entity.too.large') {
+    return res.status(413).json({
+      error: `Request body is too large. Current limit is ${JSON_LIMIT}.`
+    });
+  }
+
+  if (err instanceof SyntaxError && 'body' in err) {
+    return res.status(400).json({ error: 'Invalid JSON body' });
+  }
+
+  return next(err);
+});
 
 app.get('/site.webmanifest', (req, res) => {
   const { board, key } = req.query;

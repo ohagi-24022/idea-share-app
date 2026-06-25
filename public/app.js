@@ -89,12 +89,15 @@ async function saveBoard() {
       body: JSON.stringify({ editKey: state.board.editKey, data: state.board })
     });
     if (!response.ok) {
-      throw new Error(`Save failed with status ${response.status}`);
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.error || `Save failed with status ${response.status}`);
     }
     return true;
   } catch (error) {
     console.error("保存に失敗しました", error);
-    showToast("エラー：保存に失敗しました");
+    showToast(error.message.includes("too large")
+      ? "保存データが大きすぎます。管理者に連絡してください。"
+      : "エラー：保存に失敗しました");
     return false;
   }
 }
